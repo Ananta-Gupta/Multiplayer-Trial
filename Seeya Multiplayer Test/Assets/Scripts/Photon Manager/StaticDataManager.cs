@@ -15,8 +15,9 @@ public class StaticDataManager : MonoBehaviour
 
     [Header("Raise Events Code")]
     public const byte GameStartTimerSynk = 1;
-    public const byte SetPlayerActorNumber = 2;
+    //public const byte GeneratePlayerList = 2;
     public const byte OtherPlayerBlocker = 3;
+    public const byte GameEndState = 4;
 
     //In Game Codes
     public const byte DiceRollingSynk = 11;
@@ -25,9 +26,12 @@ public class StaticDataManager : MonoBehaviour
     public const byte ChangePlayer = 14;
     public const byte PlayerWin = 15;
 
-    public static string playerUserId;
+    //
+    public const byte MeLeftInRunningGame = 21;
+
+    public static int playerActorNumber;
     public static List<PlayerInfo> playersList = new List<PlayerInfo>();
-    public static Dictionary<string, int> playerIdInfo = new Dictionary<string, int>();
+    public static List<int> playersIDList = new List<int>();
 
     [Header("Room Controll Variables")]
     public static int     maxPlayerRoomCanHold = 20;

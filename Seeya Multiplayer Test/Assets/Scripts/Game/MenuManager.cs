@@ -22,7 +22,7 @@ public class MenuManager : MonoBehaviour
 
     public void OnClick_SeeyaWorldwide()
     {
-        Debug.Log("Seeya Worldwide Btn Pressed.");
+        //Debug.Log("Seeya Worldwide Btn Pressed.");
         ServerController.instance.JoinRoomCall();
     }
 

@@ -78,7 +78,7 @@ public class ServerController : MonoBehaviourPunCallbacks, IOnEventCallback
 
     private void PlayerCounterUpdate()
     {
-        if (!StaticDataManager.isGameLoaded)
+        if (!StaticDataManager.isGameLoaded && SceneManager.GetActiveScene().buildIndex == StaticDataManager.menuSceneIndex)
         {
             StaticDataManager.currentPlayersInRoomCount = PhotonNetwork.PlayerList.Length;
             StaticDataManager.maxPlayersInRoomCount = PhotonNetwork.CurrentRoom.MaxPlayers;
@@ -129,8 +129,9 @@ public class ServerController : MonoBehaviourPunCallbacks, IOnEventCallback
             tempText.text = player.NickName;
         }
 
-        foreach (var item in StaticDataManager.playerIdInfo)
-            Debug.Log(item.Key + "," + item.Value);
+        /*Debug.Log("Player List :-");
+        foreach (var item in StaticDataManager.playersNameList)
+            Debug.Log(item);*/
     }
     #endregion
 
@@ -175,7 +176,7 @@ public class ServerController : MonoBehaviourPunCallbacks, IOnEventCallback
 
     public override void OnJoinedLobby()
     {
-        Debug.Log("Jobby joined successfully.");
+        Debug.Log("Lobby joined successfully.");
     }
 
     public override void OnLeftLobby()
@@ -197,12 +198,7 @@ public class ServerController : MonoBehaviourPunCallbacks, IOnEventCallback
         FindObjectOfType<MenuManager>().menuPanel.SetActive(false);
 
         PlayerCounterUpdate();
-        StaticDataManager.playerUserId = PhotonNetwork.LocalPlayer.UserId;
-        //Debug.Log("Player User Id: " + StaticDataManager.playerUserId);
-
-        if (!PhotonNetwork.IsMasterClient)
-            return;
-        StaticDataManager.playerIdInfo.Add(PhotonNetwork.LocalPlayer.NickName, PhotonNetwork.LocalPlayer.ActorNumber);
+        StaticDataManager.playerActorNumber = PhotonNetwork.LocalPlayer.ActorNumber;
     }
 
     public override void OnLeftRoom()
@@ -210,11 +206,6 @@ public class ServerController : MonoBehaviourPunCallbacks, IOnEventCallback
         Debug.Log("You left the room : " + StaticDataManager.randomRooomJoinedName);
         FindObjectOfType<MenuManager>().menuPanel.SetActive(true);
         FindObjectOfType<MenuManager>().seeyaWorldwidePanel.SetActive(false);
-
-
-        if (!PhotonNetwork.IsMasterClient)
-            return;
-        StaticDataManager.playerIdInfo.Remove(PhotonNetwork.LocalPlayer.NickName);
     }
 
     public override void OnPlayerEnteredRoom(Player newPlayer)
@@ -223,10 +214,6 @@ public class ServerController : MonoBehaviourPunCallbacks, IOnEventCallback
 
         PlayerCounterUpdate();
 
-        if (!PhotonNetwork.IsMasterClient)
-            return;
-
-        StaticDataManager.playerIdInfo.Add(newPlayer.NickName, newPlayer.ActorNumber);
         object[] sendData = new object[] { WaitForPlayerController.timerToStartGame };
         PhotonRaiseEventsSender_Other(StaticDataManager.GameStartTimerSynk, sendData, true);
     }
@@ -235,12 +222,18 @@ public class ServerController : MonoBehaviourPunCallbacks, IOnEventCallback
     {
         Debug.Log(otherPlayer.NickName + " has left the room.");
 
+        if (PhotonNetwork.IsMasterClient)
+        {
+            Debug.Log("here1.");
+            if (StaticDataManager.isGameLoaded)
+            {
+                Debug.Log("here2.");
+                object[] sendData = new object[] { otherPlayer.ActorNumber };
+                PhotonRaiseEventsSender_All(StaticDataManager.MeLeftInRunningGame, sendData, true);
+            }
+        }
+
         PlayerCounterUpdate();
-
-        if (!PhotonNetwork.IsMasterClient)
-            return;
-
-        StaticDataManager.playerIdInfo.Remove(otherPlayer.NickName);
     }
     #endregion
 
@@ -266,6 +259,9 @@ public class ServerController : MonoBehaviourPunCallbacks, IOnEventCallback
     #region Photon Custom Callbacks
     private void OnFinishLoding(Scene scene, LoadSceneMode mode)
     {
+        for (int i = 0; i < PhotonNetwork.PlayerList.Length; i++)
+            StaticDataManager.playersIDList.Add(PhotonNetwork.PlayerList[i].ActorNumber);
+
         int currentScene = scene.buildIndex;
 
         switch (currentScene)
@@ -282,7 +278,7 @@ public class ServerController : MonoBehaviourPunCallbacks, IOnEventCallback
     public void PhotonRaiseEventsSender_All(byte code, object[] data, bool tf)
     {
         RaiseEventOptions reops = new RaiseEventOptions { Receivers = ReceiverGroup.All };
-        PhotonNetwork.RaiseEvent(code, data, reops, SendOptions.SendReliable);
+        PhotonNetwork.RaiseEvent(code, data, reops, SendOptions.SendUnreliable);
     }
     public void PhotonRaiseEventsSender_MasterClient(byte code, object[] data, bool tf)
     {
@@ -291,12 +287,13 @@ public class ServerController : MonoBehaviourPunCallbacks, IOnEventCallback
     }
     public void PhotonRaiseEventsSender_Other(byte code, object[] data, bool tf)
     {
-        RaiseEventOptions reops = new RaiseEventOptions { Receivers = ReceiverGroup.Others };
-        PhotonNetwork.RaiseEvent(code, data, reops, SendOptions.SendReliable);
+        RaiseEventOptions reops1 = new RaiseEventOptions { Receivers = ReceiverGroup.Others };
+        PhotonNetwork.RaiseEvent(code, data, reops1, SendOptions.SendReliable);
     }
 
     public void OnEvent(EventData photonEvent)
     {
+        //Debug.LogError("Event Code" + photonEvent.Code);
         object[] dataReceiver = (object[])photonEvent.CustomData;
 
         switch (photonEvent.Code)
@@ -306,14 +303,8 @@ public class ServerController : MonoBehaviourPunCallbacks, IOnEventCallback
                 WaitForPlayerController.notFullGameTimer = (float)dataReceiver[0];
                 break;
 
-            case StaticDataManager.DiceRollingSynk:
-                FindObjectOfType<GameManager>().diceA.text = dataReceiver[0].ToString();
-                FindObjectOfType<GameManager>().diceB.text = dataReceiver[1].ToString();
-                break;
-
             case StaticDataManager.OtherPlayerBlocker:
-                //Debug.Log("Data1 : " + dataReceiver[0] + " , Data 2 : " + PhotonNetwork.LocalPlayer.ActorNumber + "Time : " + Time.time);
-                if (int.Parse(dataReceiver[0].ToString()) == PhotonNetwork.LocalPlayer.ActorNumber)
+                if ((int)dataReceiver[0] == PhotonNetwork.LocalPlayer.ActorNumber)
                 {
                     FindObjectOfType<GameManager>().rollBtn.SetActive(true);
                     FindObjectOfType<GameManager>().bankBtn.SetActive(true);
@@ -327,7 +318,19 @@ public class ServerController : MonoBehaviourPunCallbacks, IOnEventCallback
                 }
                 break;
 
+            case StaticDataManager.GameEndState:
+                StaticDataManager.isGameLoaded = false;
+                break;
+
+            //In Game Code Cases
+            case StaticDataManager.DiceRollingSynk:
+                FindObjectOfType<GameManager>().diceA.text = dataReceiver[0].ToString();
+                FindObjectOfType<GameManager>().diceB.text = dataReceiver[1].ToString();
+                break;
+
             case StaticDataManager.CurrentScroeSynk:
+                StaticDataManager.playersList[StaticDataManager.currentPlayingPlayer].currentScoreText.text = dataReceiver[0].ToString();
+                FindObjectOfType<GameManager>().rankScoreText.text = dataReceiver[1].ToString();
                 break;
             case StaticDataManager.OverAllScoreSynk:
                 break;
@@ -337,9 +340,30 @@ public class ServerController : MonoBehaviourPunCallbacks, IOnEventCallback
                 break;
 
             case StaticDataManager.PlayerWin:
+                PhotonRaiseEventsSender_All(StaticDataManager.GameEndState, null, true);
+
                 FindObjectOfType<GameManager>().winningPanel.SetActive(true);
-                FindObjectOfType<GameManager>().winningPlayerNameText.text = dataReceiver[0].ToString() + "Win.";
+                FindObjectOfType<GameManager>().winningPlayerNameText.text = dataReceiver[0].ToString() + " Win.";
                 FindObjectOfType<GameManager>().winningPlayerScore.text = "Score : " + dataReceiver[1].ToString();
+                break;
+
+            //Game Status
+            case StaticDataManager.MeLeftInRunningGame:
+                StaticDataManager.playersIDList.Remove((int)dataReceiver[0]);
+                for (int i = 0; i < FindObjectOfType<GameManager>().playerContainer.childCount; i++)
+                {
+                    if (FindObjectOfType<GameManager>().playerContainer.GetChild(i).GetChild(0).GetComponent<Text>().text == dataReceiver[0].ToString())
+                        Destroy(FindObjectOfType<GameManager>().playerContainer.GetChild(i).gameObject);
+                }
+
+                Debug.Log("Player Count now : " + PhotonNetwork.PlayerList.Length);
+                if (PhotonNetwork.PlayerList.Length == 1)
+                {
+                    FindObjectOfType<GameManager>().playerContainer.GetChild(0).GetComponent<PlayerInfo>().isWinning = true;
+                    object[] sendData = new object[] {  FindObjectOfType<GameManager>().playerContainer.GetChild(0).GetComponent<PlayerInfo>().playerName.text,
+                                                        FindObjectOfType<GameManager>().playerContainer.GetChild(0).GetComponent<PlayerInfo>().bankedScore };
+                    ServerController.instance.PhotonRaiseEventsSender_All(StaticDataManager.PlayerWin, sendData, true);
+                }
                 break;
         }
     }

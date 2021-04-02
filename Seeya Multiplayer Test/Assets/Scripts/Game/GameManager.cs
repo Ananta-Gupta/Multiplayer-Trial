@@ -2,7 +2,6 @@ using UnityEngine;
 using UnityEngine.UI;
 using Photon.Pun;
 using UnityEngine.SceneManagement;
-using Photon.Realtime;
 
 public class GameManager : MonoBehaviour
 {
@@ -62,29 +61,16 @@ public class GameManager : MonoBehaviour
                 CheckScore();
             }
         }
-
-        if (currentPlayer.isWinning)
-        {
-            object[] sendData = new object[] { currentPlayer.playerName, currentPlayer.bankedScore };
-            ServerController.instance.PhotonRaiseEventsSender_All(StaticDataManager.PlayerWin, sendData, true);
-        }
-    }
-
-    public void BackBtnCall()
-    {
-        ServerController.instance.LeaveRoomCall();
-        SceneManager.LoadScene(StaticDataManager.menuSceneIndex);
     }
 
     private void CreatePlayerList()
     {
         for (int i = 0; i < playerContainer.childCount; i++)
-        {
             StaticDataManager.playersList.Add(playerContainer.GetChild(i).GetComponent<PlayerInfo>());
-        }
 
         if (PhotonNetwork.IsMasterClient)
             FirstPlayerSetup();
+
         currentPlayer = StaticDataManager.playersList[StaticDataManager.currentPlayingPlayer];
     }
 
@@ -102,7 +88,7 @@ public class GameManager : MonoBehaviour
 
     public void OnClickRollBtn()
     {
-        Debug.Log("OnClickRollBtn");
+        //Debug.Log("OnClickRollBtn");
         time = 2f;
         rolling = true;
     }
@@ -133,6 +119,11 @@ public class GameManager : MonoBehaviour
         StaticDataManager.playersList[StaticDataManager.currentPlayingPlayer].currentScoreText.text = StaticDataManager.playersList[StaticDataManager.currentPlayingPlayer].bankedScore.ToString();
         rankScoreText.text = StaticDataManager.playersList[StaticDataManager.currentPlayingPlayer].currentScore.ToString();
 
+        object[] sendData = new object[] {
+            StaticDataManager.playersList[StaticDataManager.currentPlayingPlayer].currentScore,
+            rankScoreText.text,
+        };
+        ServerController.instance.PhotonRaiseEventsSender_Other(StaticDataManager.CurrentScroeSynk, sendData, true);
         NextPlayer();
     }
 
@@ -150,6 +141,11 @@ public class GameManager : MonoBehaviour
 
         currentPlayer.isWinning = false;
 
+        object[] sendData = new object[] {
+            StaticDataManager.playersList[StaticDataManager.currentPlayingPlayer].currentScore,
+            rankScoreText.text,
+        };
+        ServerController.instance.PhotonRaiseEventsSender_Other(StaticDataManager.CurrentScroeSynk, sendData, true);
         NextPlayer();
     }
 
@@ -162,22 +158,32 @@ public class GameManager : MonoBehaviour
         rollBtn.GetComponent<Button>().interactable = true;
         bankBtn.GetComponent<Button>().interactable = true;
 
-        /*object[] sendData = new object[] { StaticDataManager.playersList[StaticDataManager.currentPlayingPlayer].currentScore };
-        ServerController.instance.PhotonRaiseEventsSender_All(StaticDataManager.OtherPlayerBlocker, sendData, true);*/
+        object[] sendData = new object[] {
+            StaticDataManager.playersList[StaticDataManager.currentPlayingPlayer].currentScore,
+            rankScoreText.text,
+        };
+        ServerController.instance.PhotonRaiseEventsSender_Other(StaticDataManager.CurrentScroeSynk, sendData, true);
     }
     #endregion
 
     #region Change Player
     private int localPlayerActorNo;
-    
+
     private void NextPlayer()
     {
-        if (PhotonNetwork.LocalPlayer.ActorNumber == StaticDataManager.playersList.Count)
-            localPlayerActorNo = 1;
-        else
-            localPlayerActorNo = PhotonNetwork.LocalPlayer.ActorNumber + 1;
-        
-        object[] sendData = new object[] { localPlayerActorNo };
+        for (int i = 0; i < StaticDataManager.playersIDList.Count; i++)
+        {
+            if (PhotonNetwork.LocalPlayer.ActorNumber == StaticDataManager.playersIDList[i])
+            {
+                if (i == StaticDataManager.playersIDList.Count - 1)
+                    localPlayerActorNo = 0;
+                else
+                    localPlayerActorNo = i + 1;
+            }
+        }
+
+        Debug.Log(StaticDataManager.playersIDList[localPlayerActorNo] + "," + localPlayerActorNo);
+        object[] sendData = new object[] { StaticDataManager.playersIDList[localPlayerActorNo] };
         ServerController.instance.PhotonRaiseEventsSender_All(StaticDataManager.OtherPlayerBlocker, sendData, true);
 
         ServerController.instance.PhotonRaiseEventsSender_All(StaticDataManager.ChangePlayer, null, true);
@@ -232,9 +238,20 @@ public class GameManager : MonoBehaviour
 
     private void CheckForWinner()
     {
-        if (StaticDataManager.playersList[StaticDataManager.currentPlayingPlayer].currentScore >= 50)
+        if (StaticDataManager.playersList[StaticDataManager.currentPlayingPlayer].currentScore >= 10)
+        {
             currentPlayer.isWinning = true;
-        else
-            currentPlayer.isWinning = false;
+            object[] sendData = new object[] { currentPlayer.playerName.text, currentPlayer.bankedScore };
+            ServerController.instance.PhotonRaiseEventsSender_All(StaticDataManager.PlayerWin, sendData, true);
+        }
+    }
+    
+    public void BackBtnCall()
+    {
+        StaticDataManager.isGameLoaded = false;
+        ServerController.instance.LeaveRoomCall();
+        SceneManager.LoadScene(StaticDataManager.menuSceneIndex);
     }
 }
+
+//asynk scene
